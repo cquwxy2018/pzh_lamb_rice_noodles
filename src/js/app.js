@@ -39,6 +39,11 @@
       sub: '设置出资额与分红比例，查看累计收益和回本进度',
       showRange: false
     },
+    stores: {
+      title: '门店管理',
+      sub: '每个门店独立记账、独立分红，数据互不影响',
+      showRange: false
+    },
     settings: {
       title: '设置与备份',
       sub: '核算口径、数据位置与备份恢复',
@@ -66,6 +71,8 @@
     paths: {},
     mode: '',
     version: '',
+    store: null,
+    stores: [],
     ready: false
   };
 
@@ -307,6 +314,7 @@
     else if (state.tab === 'records') renderRecords();
     else if (state.tab === 'reports') renderReports();
     else if (state.tab === 'investors') renderInvestors();
+    else if (state.tab === 'stores') renderStores();
     else if (state.tab === 'settings') renderSettings();
   }
 
@@ -1911,7 +1919,8 @@
               </div>
             </div>
             <div class="kv-list">
-              <div class="kv-row"><span>数据文件夹</span><strong>${U.esc(state.paths.dataDir || '—')}</strong></div>
+              <div class="kv-row"><span>数据根目录</span><strong>${U.esc(state.paths.rootDir || '—')}</strong></div>
+              <div class="kv-row"><span>当前门店文件夹</span><strong>${U.esc(state.paths.dataDir || '—')}</strong></div>
               <div class="kv-row"><span>数据文件</span><strong>${U.esc(state.paths.dataFile || '—')}</strong></div>
               <div class="kv-row"><span>当前记录</span><strong>${records.length} 笔 · ${state.data.investors.length} 位股东</strong></div>
             </div>
@@ -1921,7 +1930,7 @@
               <button type="button" class="btn btn-ghost btn-sm" id="exportAllRecords">导出全部流水</button>
               <button type="button" class="btn btn-ghost btn-sm" id="openFolder"${Store.isElectron ? '' : ' disabled title="浏览器预览模式不可用"'}>打开数据文件夹</button>
             </div>
-            <div class="hint" style="margin-top:12px">换电脑前先导出备份；导入备份会覆盖当前全部数据。建议定期把数据文件夹复制到 U 盘或网盘。</div>
+            <div class="hint" style="margin-top:12px">备份与导入只作用于当前门店；其他门店请先到「门店管理」切换。换电脑前先导出备份，建议定期复制数据根目录到 U 盘或网盘。</div>
           </div>
 
           <div class="card">
@@ -1929,7 +1938,7 @@
             <div class="kv-list">
               <div class="kv-row"><span>软件版本</span><strong>v${U.esc(state.version || '1.0.0')}</strong></div>
               <div class="kv-row"><span>运行模式</span><strong>${U.esc(modeLabel)}</strong></div>
-              <div class="kv-row"><span>数据范围</span><strong>单机单店 · 离线使用</strong></div>
+              <div class="kv-row"><span>数据范围</span><strong>多门店 · 当前「${U.esc((state.store && state.store.name) || state.data.settings.shopName)}」</strong></div>
             </div>
             <p class="ratio-note" style="margin-top:12px">本软件不联网、不上传账目；请自行做好备份与电脑安全管理。</p>
           </div>
@@ -1949,6 +1958,10 @@
         showFormError(settingsForm, '店铺名称不能为空');
         return;
       }
+      if (state.stores.some((store) => (!state.store || store.id !== state.store.id) && store.name === shopName)) {
+        showFormError(settingsForm, '已存在同名门店，请换一个名称');
+        return;
+      }
       if (openDate && !U.dateFromISO(openDate)) {
         showFormError(settingsForm, '开业日期格式不正确');
         return;
@@ -1965,8 +1978,18 @@
       state.data.settings.openDate = openDate;
       state.data.settings.reservePct = reservePct;
       state.data.settings.depreciationMonthly = depreciationMonthly;
+      if (state.store) {
+        state.store.name = shopName;
+        state.store.openDate = openDate;
+      }
+      const currentMeta = state.stores.find((store) => state.store && store.id === state.store.id);
+      if (currentMeta) {
+        currentMeta.name = shopName;
+        currentMeta.openDate = openDate;
+      }
       persist();
       syncBrand();
+      renderStoreSwitcher();
       toast('设置已保存');
     });
 
@@ -1987,7 +2010,7 @@
       }
       const ok = await confirmDialog(
         '导入备份',
-        `将用备份文件覆盖当前全部数据（当前 ${records.length} 笔记录、${state.data.investors.length} 位股东）。<br><br>建议先导出当前备份。确定继续吗？`,
+        `将用备份文件覆盖当前门店「${U.esc(state.data.settings.shopName)}」的全部数据（当前 ${records.length} 笔记录、${state.data.investors.length} 位股东），其他门店不受影响。<br><br>建议先导出当前备份。确定继续吗？`,
         '覆盖并导入'
       );
       if (!ok) return;
@@ -1995,6 +2018,16 @@
       state.data.settings = Store.normalize(state.data).settings;
       persist();
       syncBrand();
+      if (state.store) {
+        state.store.name = state.data.settings.shopName;
+        state.store.openDate = state.data.settings.openDate;
+      }
+      const importedMeta = state.stores.find((store) => state.store && store.id === state.store.id);
+      if (importedMeta) {
+        importedMeta.name = state.data.settings.shopName;
+        importedMeta.openDate = state.data.settings.openDate;
+      }
+      renderStoreSwitcher();
       setRangePreset('month');
       toast('备份已导入');
     });
@@ -2016,12 +2049,258 @@
     }
   }
 
+  /* ---------------- Stores ---------------- */
+
+  function applyStoreResult(result) {
+    state.data = result.data;
+    state.paths = Store.paths || {};
+    state.mode = Store.mode || '';
+    state.store = result.store || null;
+    state.stores = result.stores || [];
+    syncBrand();
+    renderStoreSwitcher();
+  }
+
+  function resetRangeForStore() {
+    state.rangePreset = 'month';
+    state.range = computeRange('month');
+  }
+
+  function closeStoreMenu() {
+    const menu = qs('storeMenu');
+    if (menu) menu.hidden = true;
+  }
+
+  function renderStoreSwitcher() {
+    const nameEl = qs('storeSwitcherName');
+    const menu = qs('storeMenu');
+    if (!nameEl || !menu) return;
+    const currentName = (state.store && state.store.name) || (state.data && state.data.settings.shopName) || '门店';
+    nameEl.textContent = currentName;
+    nameEl.title = currentName;
+    menu.innerHTML = state.stores.map((store) => `
+      <button type="button" class="store-menu-item${store.active ? ' is-active' : ''}" data-store-id="${U.esc(store.id)}">
+        <span class="store-menu-name">${U.esc(store.name)}</span>
+        ${store.active ? '<span class="store-menu-check">✓</span>' : ''}
+      </button>`).join('') + `
+      <div class="store-menu-sep"></div>
+      <button type="button" class="store-menu-item store-menu-manage" id="storeMenuManage">管理门店 / 新建门店…</button>`;
+    menu.querySelectorAll('[data-store-id]').forEach((button) => {
+      button.addEventListener('click', () => {
+        closeStoreMenu();
+        switchStoreById(button.dataset.storeId);
+      });
+    });
+    qs('storeMenuManage').addEventListener('click', () => {
+      closeStoreMenu();
+      switchTab('stores');
+    });
+  }
+
+  function bindStoreSwitcher() {
+    const btn = qs('storeSwitcherBtn');
+    const menu = qs('storeMenu');
+    const wrap = qs('storeSwitcher');
+    if (!btn || !menu || !wrap) return;
+    btn.addEventListener('click', () => {
+      menu.hidden = !menu.hidden;
+    });
+    document.addEventListener('mousedown', (event) => {
+      if (!menu.hidden && !wrap.contains(event.target)) closeStoreMenu();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeStoreMenu();
+    });
+  }
+
+  async function switchStoreById(id) {
+    if (state.store && state.store.id === id) return;
+    try {
+      await saveChain;
+      const result = await Store.switchStore(id);
+      if (!result.ok) {
+        toast(result.error || '切换失败', 'error');
+        return;
+      }
+      applyStoreResult(result);
+      resetRangeForStore();
+      render();
+      toast(`已切换到「${state.store ? state.store.name : ''}」`, 'info');
+      if (result.recoveredMessage) toast(result.recoveredMessage, 'error', 10000);
+    } catch (err) {
+      toast(`切换失败：${err.message}`, 'error');
+    }
+  }
+
+  async function renderStores() {
+    let listed;
+    try {
+      listed = await Store.listStores();
+    } catch (err) {
+      toast(`读取门店列表失败：${err.message}`, 'error');
+      return;
+    }
+    if (state.tab !== 'stores') return;
+    state.stores = listed.stores;
+    const rootPath = listed.rootDir || state.paths.rootDir || state.paths.dataDir || '—';
+    const current = state.stores.find((store) => store.active);
+    const onlyOne = state.stores.length <= 1;
+
+    qs('view').innerHTML = `
+      <div class="stack">
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>门店列表</h2>
+              <p>共 ${state.stores.length} 个门店 · 各门店账目、股东、备份完全独立</p>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" id="createStore">新建门店</button>
+          </div>
+          <div class="store-list">
+            ${state.stores.map((store) => `
+              <div class="store-row${store.active ? ' is-active' : ''}">
+                <div class="store-row-main">
+                  <div class="store-row-title">
+                    <strong>${U.esc(store.name)}</strong>
+                    ${store.active ? '<span class="badge badge-muted">当前</span>' : ''}
+                  </div>
+                  <div class="store-row-meta">
+                    ${store.openDate ? `开业于 ${U.fmtDateCN(store.openDate)} · ` : ''}${store.records} 笔流水 · ${store.investors} 位股东
+                  </div>
+                </div>
+                <div class="store-row-actions">
+                  ${store.active ? '' : `<button type="button" class="btn btn-soft btn-sm" data-switch="${U.esc(store.id)}">切换</button>`}
+                  <button type="button" class="btn btn-danger btn-sm" data-delete="${U.esc(store.id)}"${onlyOne ? ' disabled title="至少需要保留一个门店"' : ''}>删除</button>
+                </div>
+              </div>`).join('')}
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>数据存放</h2>
+              <p>每个门店一个独立子文件夹，删除门店只清理它自己的文件夹</p>
+            </div>
+          </div>
+          <div class="kv-list">
+            <div class="kv-row"><span>数据根目录</span><strong>${U.esc(rootPath)}</strong></div>
+            <div class="kv-row"><span>当前门店文件夹</span><strong>${U.esc(state.paths.dataDir || '—')}</strong></div>
+            <div class="kv-row"><span>当前门店</span><strong>${U.esc(current ? current.name : '—')}</strong></div>
+          </div>
+          <div class="data-actions">
+            <button type="button" class="btn btn-ghost btn-sm" id="openRootFolder"${Store.isElectron ? '' : ' disabled title="浏览器预览模式不可用"'}>打开数据根目录</button>
+          </div>
+          <div class="hint" style="margin-top:12px">建议定期把整个数据根目录复制到 U 盘或网盘；单个门店也可以在「设置与备份」里导出备份。</div>
+        </div>
+      </div>`;
+
+    qs('createStore').addEventListener('click', openStoreCreateModal);
+    qs('view').querySelectorAll('[data-switch]').forEach((button) => {
+      button.addEventListener('click', () => switchStoreById(button.dataset.switch));
+    });
+    qs('view').querySelectorAll('[data-delete]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const store = state.stores.find((item) => item.id === button.dataset.delete);
+        if (store) openStoreDeleteModal(store);
+      });
+    });
+    const openRoot = qs('openRootFolder');
+    if (openRoot && Store.isElectron) {
+      openRoot.addEventListener('click', async () => {
+        const result = await Store.openRootFolder();
+        if (result && !result.ok) toast(result.error || '无法打开文件夹', 'error');
+      });
+    }
+  }
+
+  function openStoreCreateModal() {
+    const rootPath = state.paths.rootDir || state.paths.dataDir || '—';
+    openModal({
+      title: '新建门店',
+      subtitle: '每个门店拥有独立的账目、股东与备份',
+      bodyHTML: `
+        <div class="form-grid">
+          <div class="field full">
+            <label>门店名称（必填）</label>
+            <input type="text" name="storeName" maxlength="30" placeholder="如：攀枝花羊肉米线（XX店）">
+          </div>
+          <div class="field full">
+            <label>开业日期（必填）</label>
+            <input type="date" name="storeOpenDate" value="${U.todayISO()}">
+            <div class="hint">用于计算经营天数与年化收益率。</div>
+          </div>
+          <div class="field full">
+            <label>数据文件夹（自动创建，无需手动配置）</label>
+            <div class="readonly-value">${U.esc(rootPath)}</div>
+            <div class="hint">新门店会在这个目录下建立自己的独立子文件夹。</div>
+          </div>
+        </div>
+        <div class="hint" style="margin-top:10px">股东与分红比例、备用金、折旧等，可在创建后到「设置与备份」里配置。</div>`,
+      submitText: '创建门店',
+      onSubmit: async (formData) => {
+        const name = String(formData.get('storeName') || '').trim();
+        const openDate = String(formData.get('storeOpenDate') || '');
+        if (!name) return '请填写门店名称';
+        if (!U.dateFromISO(openDate)) return '请填写有效的开业日期';
+        await saveChain;
+        const result = await Store.createStore({ name, openDate });
+        if (!result.ok) return result.error || '创建失败';
+        applyStoreResult(result);
+        resetRangeForStore();
+        switchTab('dashboard');
+        toast(`门店「${name}」已创建，开始记账吧`);
+        if (result.recoveredMessage) toast(result.recoveredMessage, 'error', 10000);
+      }
+    });
+  }
+
+  function openStoreDeleteModal(store) {
+    openModal({
+      title: '删除门店',
+      subtitle: '该操作不可恢复，请谨慎操作',
+      bodyHTML: `
+        <div class="modal-text">
+          将永久删除门店「<b>${U.esc(store.name)}</b>」的全部数据：<br>
+          ${store.records} 笔流水、${store.investors} 位股东，以及该门店的全部自动备份。其他门店不受影响。
+        </div>
+        <div class="field full" style="margin-top:14px">
+          <label class="checkbox-line"><input type="checkbox" name="backupBeforeDelete" checked> 删除前先导出备份文件（推荐）</label>
+        </div>
+        <div class="field full" style="margin-top:12px">
+          <label>请输入门店名称「${U.esc(store.name)}」以确认删除</label>
+          <input type="text" name="confirmName" autocomplete="off" placeholder="${U.esc(store.name)}">
+        </div>`,
+      submitText: '永久删除',
+      submitClass: 'btn-danger',
+      onSubmit: async (formData) => {
+        const typed = String(formData.get('confirmName') || '').trim();
+        if (typed !== store.name) return `请完整输入门店名称「${store.name}」`;
+        const backup = formData.get('backupBeforeDelete') === 'on';
+        await saveChain;
+        const result = await Store.deleteStore(store.id, { backup });
+        if (result.canceled) return '已取消备份导出，删除未执行';
+        if (!result.ok) return result.error || '删除失败';
+        if (result.switched) {
+          applyStoreResult(result);
+          resetRangeForStore();
+        } else {
+          state.stores = result.stores;
+          renderStoreSwitcher();
+        }
+        render();
+        toast(`门店「${store.name}」已删除`);
+      }
+    });
+  }
+
   /* ---------------- Init ---------------- */
 
   function bindNavigation() {
     qs('nav').querySelectorAll('[data-tab]').forEach((button) => {
       button.addEventListener('click', () => switchTab(button.dataset.tab));
     });
+    bindStoreSwitcher();
     qs('applyRange').addEventListener('click', applyCustomRange);
     qs('rangeStart').addEventListener('keydown', (event) => {
       if (event.key === 'Enter') applyCustomRange();
@@ -2034,15 +2313,10 @@
   async function init() {
     try {
       const result = await Store.load();
-      state.data = result.data;
-      state.paths = Store.paths || {};
-      state.mode = Store.mode || '';
       state.version = await Store.getVersion();
-
-      state.rangePreset = 'month';
-      state.range = computeRange('month');
+      applyStoreResult(result);
+      resetRangeForStore();
       bindNavigation();
-      syncBrand();
       render();
 
       if (result.recoveredMessage) {
@@ -2064,7 +2338,8 @@
     state,
     switchTab,
     persist,
-    init
+    init,
+    switchStore: switchStoreById
   };
 
   document.addEventListener('DOMContentLoaded', init);

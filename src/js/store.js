@@ -84,9 +84,93 @@
     };
   }
 
+  const LS_INDEX_KEY = 'lamb-noodle-stores-v1';
+  const LS_LEGACY_KEY = 'lamb-noodle-data-v1';
+  const lsDataKey = (id) => `lamb-noodle-store-data-${id}`;
+
+  function browserNewId() {
+    return `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  function browserReadIndex() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(LS_INDEX_KEY) || 'null');
+      if (parsed && Array.isArray(parsed.stores) && parsed.stores.length) {
+        const stores = parsed.stores.filter((store) => store && typeof store.id === 'string' && typeof store.name === 'string');
+        if (stores.length) {
+          const activeId = stores.some((store) => store.id === parsed.activeId) ? parsed.activeId : stores[0].id;
+          return { version: 1, activeId, stores };
+        }
+      }
+    } catch (err) { /* 索引损坏时重建 */ }
+    return null;
+  }
+
+  function browserWriteIndex(index) {
+    localStorage.setItem(LS_INDEX_KEY, JSON.stringify(index));
+  }
+
+  function browserInitIndex() {
+    let index = browserReadIndex();
+    if (index) return index;
+    const id = browserNewId();
+    let name = defaultData().settings.shopName;
+    let openDate = '';
+    const legacyRaw = localStorage.getItem(LS_LEGACY_KEY);
+    if (legacyRaw) {
+      try {
+        const legacy = JSON.parse(legacyRaw);
+        name = String((legacy.settings && legacy.settings.shopName) || name).slice(0, 30);
+        openDate = U.dateFromISO(legacy.settings && legacy.settings.openDate) ? legacy.settings.openDate : '';
+      } catch (err) { /* 旧数据损坏时按空账本迁移 */ }
+      localStorage.setItem(lsDataKey(id), legacyRaw);
+      localStorage.removeItem(LS_LEGACY_KEY);
+    } else {
+      localStorage.setItem(lsDataKey(id), JSON.stringify(defaultData()));
+    }
+    index = { version: 1, activeId: id, stores: [{ id, name, openDate, createdAt: Date.now() }] };
+    browserWriteIndex(index);
+    return index;
+  }
+
+  function browserListStores(index) {
+    return index.stores.map((store) => {
+      let records = 0;
+      let investors = 0;
+      try {
+        const data = normalize(JSON.parse(localStorage.getItem(lsDataKey(store.id)) || 'null'));
+        records = data.incomes.length + data.expenses.length + data.capitals.length;
+        investors = data.investors.length;
+      } catch (err) { /* 单店损坏不影响列表 */ }
+      return Object.assign({}, store, {
+        openDate: store.openDate || '',
+        createdAt: store.createdAt || 0,
+        active: store.id === index.activeId,
+        records,
+        investors
+      });
+    });
+  }
+
+  function browserLoadResult(index) {
+    let raw = null;
+    let recoveredMessage = '';
+    try {
+      raw = JSON.parse(localStorage.getItem(lsDataKey(index.activeId)) || 'null');
+    } catch (err) {
+      recoveredMessage = '浏览器本地数据损坏，已创建空账本。';
+    }
+    return {
+      data: normalize(raw),
+      recoveredMessage,
+      store: index.stores.find((store) => store.id === index.activeId),
+      stores: browserListStores(index)
+    };
+  }
+
   const Store = {
     isElectron: typeof window.shopAPI !== 'undefined',
-    paths: { dataDir: '浏览器本地存储', dataFile: 'localStorage' },
+    paths: { dataDir: '浏览器本地存储', dataFile: 'localStorage', rootDir: 'localStorage' },
     mode: 'browser',
     version: '1.0.0-web',
 
@@ -98,18 +182,15 @@
         this.version = result.version || this.version;
         return {
           data: normalize(result.data),
-          recoveredMessage: result.recoveredMessage || ''
+          recoveredMessage: result.recoveredMessage || '',
+          store: result.store || null,
+          stores: result.stores || []
         };
       }
-      let raw = null;
-      let recoveredMessage = '';
-      try {
-        raw = JSON.parse(localStorage.getItem('lamb-noodle-data-v1') || 'null');
-      } catch (err) {
-        recoveredMessage = '浏览器本地数据损坏，已创建空账本。';
-      }
-      const version = await this.getVersion();
-      return { data: normalize(raw), recoveredMessage, version };
+      const index = browserInitIndex();
+      const result = browserLoadResult(index);
+      result.version = await this.getVersion();
+      return result;
     },
 
     async save(data) {
@@ -117,9 +198,77 @@
       if (this.isElectron) {
         await window.shopAPI.save(payload);
       } else {
-        localStorage.setItem('lamb-noodle-data-v1', JSON.stringify(payload));
+        const index = browserInitIndex();
+        localStorage.setItem(lsDataKey(index.activeId), JSON.stringify(payload));
+        const store = index.stores.find((item) => item.id === index.activeId);
+        if (store && (store.name !== payload.settings.shopName || (store.openDate || '') !== payload.settings.openDate)) {
+          store.name = payload.settings.shopName;
+          store.openDate = payload.settings.openDate;
+          browserWriteIndex(index);
+        }
       }
       return true;
+    },
+
+    async listStores() {
+      if (this.isElectron) return window.shopAPI.listStores();
+      const index = browserInitIndex();
+      return { stores: browserListStores(index), rootDir: 'localStorage' };
+    },
+
+    async createStore(payload) {
+      const name = String(payload?.name || '').trim().slice(0, 30);
+      const openDate = String(payload?.openDate || '');
+      if (!name) return { ok: false, error: '门店名称不能为空' };
+      if (!U.dateFromISO(openDate)) return { ok: false, error: '请填写有效的开业日期' };
+      if (this.isElectron) return window.shopAPI.createStore({ name, openDate });
+      const index = browserInitIndex();
+      if (index.stores.some((store) => store.name === name)) {
+        return { ok: false, error: '已存在同名门店，请换一个名称' };
+      }
+      const id = browserNewId();
+      const data = defaultData();
+      data.settings.shopName = name;
+      data.settings.openDate = openDate;
+      localStorage.setItem(lsDataKey(id), JSON.stringify(data));
+      index.stores.push({ id, name, openDate, createdAt: Date.now() });
+      index.activeId = id;
+      browserWriteIndex(index);
+      return Object.assign({ ok: true }, browserLoadResult(index));
+    },
+
+    async switchStore(id) {
+      if (this.isElectron) return window.shopAPI.switchStore(id);
+      const index = browserInitIndex();
+      if (!index.stores.some((store) => store.id === id)) return { ok: false, error: '门店不存在' };
+      index.activeId = id;
+      browserWriteIndex(index);
+      return Object.assign({ ok: true }, browserLoadResult(index));
+    },
+
+    async deleteStore(id, options) {
+      if (this.isElectron) return window.shopAPI.deleteStore({ id, backup: !!(options && options.backup) });
+      const index = browserInitIndex();
+      const store = index.stores.find((item) => item.id === id);
+      if (!store) return { ok: false, error: '门店不存在' };
+      if (index.stores.length <= 1) return { ok: false, error: '至少需要保留一个门店' };
+      if (options && options.backup) {
+        let data = defaultData();
+        try {
+          data = normalize(JSON.parse(localStorage.getItem(lsDataKey(id)) || 'null'));
+        } catch (err) { /* 损坏数据也允许继续删除 */ }
+        await this.exportBackup(data);
+      }
+      const wasActive = index.activeId === id;
+      localStorage.removeItem(lsDataKey(id));
+      index.stores = index.stores.filter((item) => item.id !== id);
+      if (wasActive) {
+        index.activeId = index.stores[0].id;
+        browserWriteIndex(index);
+        return Object.assign({ ok: true, switched: true }, browserLoadResult(index));
+      }
+      browserWriteIndex(index);
+      return { ok: true, switched: false, stores: browserListStores(index) };
     },
 
     async getVersion() {
@@ -159,7 +308,8 @@
     },
 
     async exportBackup(data) {
-      const filename = `羊肉米线记账-备份-${U.todayISO()}.json`;
+      const shopName = String((data && data.settings && data.settings.shopName) || '羊肉米线记账').replace(/[\\/:*?"<>|]/g, '_');
+      const filename = `${shopName}-备份-${U.todayISO()}.json`;
       const content = JSON.stringify(normalize(data), null, 2);
       if (this.isElectron) {
         return window.shopAPI.exportBackup({ defaultName: filename, content });
@@ -205,6 +355,11 @@
 
     async openDataFolder() {
       if (this.isElectron) return window.shopAPI.openDataFolder();
+      return { ok: false, error: '浏览器预览模式无法打开文件夹' };
+    },
+
+    async openRootFolder() {
+      if (this.isElectron) return window.shopAPI.openRootFolder();
       return { ok: false, error: '浏览器预览模式无法打开文件夹' };
     }
   };
