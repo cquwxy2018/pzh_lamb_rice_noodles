@@ -135,6 +135,12 @@ button {
   text-overflow: ellipsis;
 }
 
+.brand-text .brand-by {
+  font-size: 10px;
+  color: rgba(244, 233, 221, 0.36);
+  letter-spacing: 0.2px;
+}
+
 /* ---------- Store switcher ---------- */
 .store-switcher {
   margin-top: 18px;

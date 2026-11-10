@@ -1,6 +1,6 @@
 {
   "name": "lamb-noodle-books",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "羊肉米线店记账与股东分红管理工具",
   "main": "main.js",
   "author": "wxy",
@@ -20,6 +20,7 @@
   "build": {
     "appId": "com.wxy.lambnoodlebooks",
     "productName": "羊肉米线记账",
+    "copyright": "Copyright © 2026 by @ 猴子_扛过吴彦祖",
     "directories": {
       "output": "release",
       "buildResources": "build"

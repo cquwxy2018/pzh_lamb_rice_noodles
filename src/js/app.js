@@ -182,8 +182,8 @@
   function syncBrand() {
     const name = state.data.settings.shopName || '羊肉米线记账';
     qs('brandName').textContent = name;
-    qs('brandSub').textContent = '小店经营与分红';
-    document.title = `${name} · 记账分红`;
+    qs('brandSub').textContent = '羊肉米线店 · 记账分红';
+    document.title = `${name} · 记账分红 · by @ 猴子_扛过吴彦祖`;
   }
 
   /* ---------------- Range ---------------- */
@@ -1939,6 +1939,7 @@
               <div class="kv-row"><span>软件版本</span><strong>v${U.esc(state.version || '1.0.0')}</strong></div>
               <div class="kv-row"><span>运行模式</span><strong>${U.esc(modeLabel)}</strong></div>
               <div class="kv-row"><span>数据范围</span><strong>多门店 · 当前「${U.esc((state.store && state.store.name) || state.data.settings.shopName)}」</strong></div>
+              <div class="kv-row"><span>版权署名</span><strong>by @ 猴子_扛过吴彦祖</strong></div>
             </div>
             <p class="ratio-note" style="margin-top:12px">本软件不联网、不上传账目；请自行做好备份与电脑安全管理。</p>
           </div>

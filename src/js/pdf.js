@@ -193,7 +193,8 @@
   </section>
 
   <div class="report-foot">
-    生成时间：${U.esc(generatedAt)} · 由「${U.esc(shopName)}」记账分红工具生成 · 数据仅保存在本机
+    生成时间：${U.esc(generatedAt)} · 由「${U.esc(shopName)}」记账分红工具生成<br>
+    by @ 猴子_扛过吴彦祖 · 数据仅保存在本机
   </div>
 </body>
 </html>`;
