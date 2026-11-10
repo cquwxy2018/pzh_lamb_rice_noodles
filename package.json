@@ -1,0 +1,67 @@
+{
+  "name": "lamb-noodle-books",
+  "version": "1.1.0",
+  "description": "羊肉米线店记账与股东分红管理工具",
+  "main": "main.js",
+  "author": "wxy",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable",
+    "dist:mac": "electron-builder --mac dmg",
+    "dist:mac:arm64": "electron-builder --mac dmg --arm64",
+    "dist:mac:x64": "electron-builder --mac dmg --x64"
+  },
+  "devDependencies": {
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "com.wxy.lambnoodlebooks",
+    "productName": "羊肉米线记账",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "portable": {
+      "artifactName": "lamb-noodle-books-${version}-portable.${ext}",
+      "requestExecutionLevel": "user"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.finance",
+      "identity": null
+    },
+    "dmg": {
+      "artifactName": "lamb-noodle-books-${version}-${arch}.${ext}"
+    },
+    "publish": null
+  }
+}
