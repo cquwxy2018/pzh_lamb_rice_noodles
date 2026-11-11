@@ -58,7 +58,8 @@
       ],
       "icon": "build/icon.png",
       "category": "public.app-category.finance",
-      "identity": null
+      "identity": "-",
+      "hardenedRuntime": false
     },
     "dmg": {
       "artifactName": "lamb-noodle-books-${version}-${arch}.${ext}"
