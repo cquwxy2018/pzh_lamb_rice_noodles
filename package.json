@@ -1,6 +1,6 @@
 {
   "name": "lamb-noodle-books",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "羊肉米线店记账与股东分红管理工具",
   "main": "main.js",
   "author": "wxy",

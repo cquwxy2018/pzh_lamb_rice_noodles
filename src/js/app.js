@@ -34,6 +34,11 @@
       sub: '按日 / 周 / 月 / 年查看利润与每位股东应分，可导出 PDF',
       showRange: true
     },
+    weekly: {
+      title: '收支周报',
+      sub: '按周看清钱从哪来、花到哪去，可导出 PDF / CSV',
+      showRange: false
+    },
     investors: {
       title: '股东与分红',
       sub: '设置出资额与分红比例，查看累计收益和回本进度',
@@ -67,6 +72,7 @@
     rangePreset: 'month',
     range: { start: U.todayISO(), end: U.todayISO(), label: '本月' },
     reportMode: 'day',
+    weekCursor: U.todayISO(),
     recordFilter: { type: 'all', start: '', end: '', q: '' },
     paths: {},
     mode: '',
@@ -313,6 +319,7 @@
     else if (state.tab === 'entry') renderEntry();
     else if (state.tab === 'records') renderRecords();
     else if (state.tab === 'reports') renderReports();
+    else if (state.tab === 'weekly') renderWeekly();
     else if (state.tab === 'investors') renderInvestors();
     else if (state.tab === 'stores') renderStores();
     else if (state.tab === 'settings') renderSettings();
@@ -1495,6 +1502,250 @@
       .then((result) => {
         if (result && result.ok) {
           toast(result.browser ? '已下载报表 CSV' : `已导出到 ${result.filePath}`, 'info', 5000);
+        } else if (result && !result.canceled) {
+          toast(result.error || '导出失败', 'error');
+        }
+      })
+      .catch((err) => toast(`导出失败：${err.message}`, 'error'));
+  }
+
+  /* ---------------- Weekly report ---------------- */
+
+  function deltaText(delta) {
+    if (delta === null) return '—';
+    return `${delta > 0 ? '+' : ''}${U.num(delta).toFixed(1)}%`;
+  }
+
+  function deltaClass(delta, inverse) {
+    if (delta === null || delta === 0) return '';
+    const positive = inverse ? delta < 0 : delta > 0;
+    return positive ? 'pos' : 'neg';
+  }
+
+  function shareBarHTML(pct) {
+    const width = Math.max(0, Math.min(100, U.num(pct)));
+    return `<span class="share-bar"><i style="width:${width.toFixed(1)}%"></i></span>`;
+  }
+
+  function renderWeekly() {
+    const stats = C.weekStats(state.data, state.weekCursor);
+    const today = U.todayISO();
+    const rangeText = `${U.fmtDateCN(stats.start)} - ${U.fmtDateCN(stats.end)}`;
+    const hasData = stats.income.count + stats.expense.count > 0;
+
+    const channelRows = stats.income.byChannel.map((item) => `
+      <tr>
+        <td>${U.esc(item.name)}</td>
+        <td class="num">${item.count}</td>
+        <td class="num">${U.money(item.amount)}</td>
+        <td class="num share-cell"><span>${U.pct(item.pct, 1)}</span>${shareBarHTML(item.pct)}</td>
+      </tr>`).join('');
+    const categoryRows = stats.expense.byCategory.map((item) => `
+      <tr>
+        <td>${U.esc(item.name)}</td>
+        <td class="num">${item.count}</td>
+        <td class="num">${U.money(item.amount)}</td>
+        <td class="num share-cell"><span>${U.pct(item.pct, 1)}</span>${shareBarHTML(item.pct)}</td>
+      </tr>`).join('');
+
+    const dailyRows = stats.days.map((day) => `
+      <tr${day.date === today ? ' class="is-today"' : ''}>
+        <td>${U.fmtDateShort(day.date)} ${U.esc(day.weekday)}</td>
+        <td class="num">${U.money(day.income)}</td>
+        <td class="num">${U.money(day.expense)}</td>
+        <td class="num ${day.net < 0 ? 'neg' : day.net > 0 ? 'pos' : ''}">${U.money(day.net)}</td>
+      </tr>`).join('');
+
+    qs('view').innerHTML = `
+      <div class="stack">
+        <div class="card week-bar-card">
+          <div class="week-bar">
+            <div class="week-nav">
+              <button type="button" class="btn btn-ghost btn-sm" id="weekPrev">‹ 上一周</button>
+              <button type="button" class="btn btn-soft btn-sm" id="weekThis">本周</button>
+              <button type="button" class="btn btn-ghost btn-sm" id="weekNext">下一周 ›</button>
+            </div>
+            <div class="week-title">
+              <strong>${U.esc(stats.label)}</strong>
+              <span>${U.esc(rangeText)}</span>
+            </div>
+            <div class="week-actions">
+              <input type="date" id="weekDate" value="${U.esc(stats.start)}" aria-label="选择周">
+              <button type="button" class="btn btn-primary btn-sm" id="exportWeeklyPdf">导出 PDF</button>
+              <button type="button" class="btn btn-ghost btn-sm" id="exportWeeklyCsv">导出 CSV</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-kpi">
+          <div class="kpi-card accent-brand">
+            <div class="kpi-label">营业收入</div>
+            <div class="kpi-value">${U.money(stats.income.total)}</div>
+            <div class="kpi-foot">${stats.income.count} 笔 · 较上周 <b class="${deltaClass(stats.prev.incomeDelta)}">${deltaText(stats.prev.incomeDelta)}</b></div>
+          </div>
+          <div class="kpi-card accent-gold">
+            <div class="kpi-label">现金支出</div>
+            <div class="kpi-value">${U.money(stats.expense.total)}</div>
+            <div class="kpi-foot">${stats.expense.count} 笔 · 较上周 <b class="${deltaClass(stats.prev.expenseDelta, true)}">${deltaText(stats.prev.expenseDelta)}</b></div>
+          </div>
+          <div class="kpi-card ${stats.net >= 0 ? 'accent-green' : 'accent-red'}">
+            <div class="kpi-label">净流入</div>
+            <div class="kpi-value ${stats.net > 0 ? 'is-pos' : stats.net < 0 ? 'is-neg' : ''}">${U.money(stats.net)}</div>
+            <div class="kpi-foot">收入 − 支出（现金口径）</div>
+          </div>
+          <div class="kpi-card accent-purple">
+            <div class="kpi-label">日均营收</div>
+            <div class="kpi-value">${U.money(stats.income.total / 7)}</div>
+            <div class="kpi-foot">按 7 天平均 · 上周收入 ${U.money(stats.prev.incomeTotal)}</div>
+          </div>
+        </div>
+
+        ${hasData ? `
+        <div class="grid-even">
+          <div class="card">
+            <div class="card-head">
+              <div><h2>收入构成</h2><p>本周收入按渠道</p></div>
+            </div>
+            ${stats.income.byChannel.length ? `
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th>渠道</th><th class="num">笔数</th><th class="num">金额</th><th class="num">占比</th></tr></thead>
+                <tbody>
+                  ${channelRows}
+                  <tr class="total-row"><td>合计</td><td class="num">${stats.income.count}</td><td class="num">${U.money(stats.income.total)}</td><td class="num">100%</td></tr>
+                </tbody>
+              </table>
+            </div>` : '<div class="empty-inline">本周还没有收入记录</div>'}
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <div><h2>支出构成</h2><p>本周支出按分类</p></div>
+            </div>
+            ${stats.expense.byCategory.length ? `
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th>分类</th><th class="num">笔数</th><th class="num">金额</th><th class="num">占比</th></tr></thead>
+                <tbody>
+                  ${categoryRows}
+                  <tr class="total-row"><td>合计</td><td class="num">${stats.expense.count}</td><td class="num">${U.money(stats.expense.total)}</td><td class="num">100%</td></tr>
+                </tbody>
+              </table>
+            </div>` : '<div class="empty-inline">本周还没有支出记录</div>'}
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div><h2>每日明细</h2><p>${U.esc(rangeText)} · 净额 = 当日收入 − 当日支出</p></div>
+          </div>
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>日期</th><th class="num">收入</th><th class="num">支出</th><th class="num">净额</th></tr></thead>
+              <tbody>
+                ${dailyRows}
+                <tr class="total-row"><td>合计</td><td class="num">${U.money(stats.income.total)}</td><td class="num">${U.money(stats.expense.total)}</td><td class="num ${stats.net < 0 ? 'neg' : stats.net > 0 ? 'pos' : ''}">${U.money(stats.net)}</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="ratio-note">本周统计现金收支，不含折旧摊销与股东分红；本周数据会随记账实时更新。</p>
+        </div>` : `
+        <div class="card">
+          <div class="empty">
+            <div class="empty-mark">周</div>
+            <div class="empty-title">这一周还没有收支记录</div>
+            <div class="empty-sub">可以切换到其他周查看，或先去「记一笔」录入本店收支。</div>
+            <div class="empty-actions"><button type="button" class="btn btn-soft btn-sm" id="weeklyGoEntry">去记一笔</button></div>
+          </div>
+        </div>`}
+      </div>`;
+
+    qs('weekPrev').addEventListener('click', () => {
+      state.weekCursor = U.addDays(stats.start, -7);
+      renderWeekly();
+    });
+    qs('weekNext').addEventListener('click', () => {
+      state.weekCursor = U.addDays(stats.start, 7);
+      renderWeekly();
+    });
+    qs('weekThis').addEventListener('click', () => {
+      state.weekCursor = U.todayISO();
+      renderWeekly();
+    });
+    qs('weekDate').addEventListener('change', (event) => {
+      const value = event.target.value;
+      if (U.dateFromISO(value)) {
+        state.weekCursor = value;
+        renderWeekly();
+      }
+    });
+    qs('exportWeeklyPdf').addEventListener('click', exportWeeklyPDF);
+    qs('exportWeeklyCsv').addEventListener('click', exportWeeklyCSV);
+    const goEntry = qs('weeklyGoEntry');
+    if (goEntry) goEntry.addEventListener('click', () => switchTab('entry'));
+  }
+
+  function exportWeeklyPDF() {
+    const stats = C.weekStats(state.data, state.weekCursor);
+    const html = window.PdfReport.buildWeeklyHTML(state.data, stats.start);
+    const filename = `${state.data.settings.shopName}-收支周报-${stats.start}-${stats.end}.pdf`;
+    toast('正在生成 PDF…', 'info', 2500);
+    Store.exportPdf(html, filename)
+      .then((result) => {
+        if (result && result.ok) {
+          if (result.html) toast('浏览器拦截了弹窗，已下载报表 HTML，可打开后打印为 PDF', 'info', 6000);
+          else if (result.browser) toast('已打开打印窗口，可选择「另存为 PDF」', 'info', 6000);
+          else toast(`已导出到 ${result.filePath}`, 'info', 6000);
+        } else if (result && !result.canceled) {
+          toast(result.error || '导出失败', 'error');
+        }
+      })
+      .catch((err) => toast(`导出失败：${err.message}`, 'error'));
+  }
+
+  function exportWeeklyCSV() {
+    const stats = C.weekStats(state.data, state.weekCursor);
+    const rows = [
+      [`${state.data.settings.shopName} - 收支周报`],
+      [`统计区间：${stats.start} 至 ${stats.end}（${stats.label}）`],
+      [`导出时间：${new Date().toLocaleString('zh-CN')}`],
+      [],
+      ['本周汇总', '笔数', '金额'],
+      ['营业收入', stats.income.count, U.plain(stats.income.total)],
+      ['现金支出', stats.expense.count, U.plain(stats.expense.total)],
+      ['净流入', '', U.plain(stats.net)],
+      ['上周收入', '', U.plain(stats.prev.incomeTotal)],
+      ['上周支出', '', U.plain(stats.prev.expenseTotal)],
+      ['收入环比', '', stats.prev.incomeDelta === null ? '' : `${stats.prev.incomeDelta.toFixed(2)}%`],
+      ['支出环比', '', stats.prev.expenseDelta === null ? '' : `${stats.prev.expenseDelta.toFixed(2)}%`],
+      [],
+      ['收入渠道构成'],
+      ['渠道', '笔数', '金额', '占比'],
+      ...stats.income.byChannel.map((item) => [item.name, item.count, U.plain(item.amount), `${item.pct.toFixed(2)}%`]),
+      ['合计', stats.income.count, U.plain(stats.income.total), stats.income.total > 0 ? '100.00%' : ''],
+      [],
+      ['支出分类构成'],
+      ['分类', '笔数', '金额', '占比'],
+      ...stats.expense.byCategory.map((item) => [item.name, item.count, U.plain(item.amount), `${item.pct.toFixed(2)}%`]),
+      ['合计', stats.expense.count, U.plain(stats.expense.total), stats.expense.total > 0 ? '100.00%' : ''],
+      [],
+      ['每日明细'],
+      ['日期', '星期', '收入', '支出', '净额'],
+      ...stats.days.map((day) => [day.date, day.weekday, U.plain(day.income), U.plain(day.expense), U.plain(day.net)]),
+      ['合计', '', U.plain(stats.income.total), U.plain(stats.expense.total), U.plain(stats.net)],
+      [],
+      ['口径说明'],
+      ['本报告统计现金收支（营业收入与日常支出），不含折旧摊销与股东分红'],
+      ['收入、支出按记账日期归入所在自然周；周一至周日为一周'],
+      ['占比 = 该项目金额 ÷ 本周收入（或支出）合计'],
+      ['环比 =（本周 - 上周）÷ 上周；上周对应项为 0 时留空']
+    ];
+
+    const content = U.buildCSV(rows);
+    Store.exportFile(`收支周报-${stats.start}-${stats.end}.csv`, content, 'text/csv;charset=utf-8')
+      .then((result) => {
+        if (result && result.ok) {
+          toast(result.browser ? '已下载周报 CSV' : `已导出到 ${result.filePath}`, 'info', 5000);
         } else if (result && !result.canceled) {
           toast(result.error || '导出失败', 'error');
         }

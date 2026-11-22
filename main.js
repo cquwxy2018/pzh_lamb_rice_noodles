@@ -388,11 +388,17 @@ function createWindow() {
           }
           if (smokePdfTarget) {
             const now = new Date();
+            const pad = (n) => String(n).padStart(2, '0');
+            const todayIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
             const period = smokePeriod || (smokeType === 'month'
-              ? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-              : String(now.getFullYear()));
+              ? `${now.getFullYear()}-${pad(now.getMonth() + 1)}`
+              : smokeType === 'week'
+                ? todayIso
+                : String(now.getFullYear()));
             const html = await mainWindow.webContents.executeJavaScript(
-              `window.PdfReport.buildHTML(window.App.state.data, ${JSON.stringify(smokeType)}, ${JSON.stringify(period)})`
+              smokeType === 'week'
+                ? `window.PdfReport.buildWeeklyHTML(window.App.state.data, ${JSON.stringify(period)})`
+                : `window.PdfReport.buildHTML(window.App.state.data, ${JSON.stringify(smokeType)}, ${JSON.stringify(period)})`
             );
             const buffer = await renderPdfBuffer(html);
             const outPdf = path.resolve(smokePdfTarget);

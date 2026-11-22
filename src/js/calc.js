@@ -101,6 +101,119 @@
     };
   };
 
+  C.weekStats = function (data, weekStartIso) {
+    const start = U.startOfWeek(weekStartIso);
+    const end = U.addDays(start, 6);
+    const prevStart = U.addDays(start, -7);
+    const prevEnd = U.addDays(start, -1);
+
+    function collect(rangeStart, rangeEnd) {
+      const incomes = (data.incomes || []).filter((r) => r.date >= rangeStart && r.date <= rangeEnd);
+      const expenses = (data.expenses || []).filter((r) => r.date >= rangeStart && r.date <= rangeEnd);
+      const incomeTotal = U.round2(U.sum(incomes, (r) => r.amount));
+      const expenseTotal = U.round2(U.sum(expenses, (r) => r.amount));
+
+      const channelMap = {};
+      incomes.forEach((r) => {
+        const key = r.channel || '其他收入';
+        if (!channelMap[key]) channelMap[key] = { name: key, amount: 0, count: 0 };
+        channelMap[key].amount += U.num(r.amount);
+        channelMap[key].count += 1;
+      });
+      const byChannel = Object.keys(channelMap).map((name) => {
+        const item = channelMap[name];
+        return {
+          name,
+          amount: U.round2(item.amount),
+          count: item.count,
+          pct: incomeTotal > 0 ? (item.amount / incomeTotal) * 100 : 0
+        };
+      }).sort((a, b) => b.amount - a.amount);
+
+      const categoryMap = {};
+      expenses.forEach((r) => {
+        const key = r.category || '其他支出';
+        if (!categoryMap[key]) categoryMap[key] = { name: key, amount: 0, count: 0 };
+        categoryMap[key].amount += U.num(r.amount);
+        categoryMap[key].count += 1;
+      });
+      const byCategory = Object.keys(categoryMap).map((name) => {
+        const item = categoryMap[name];
+        return {
+          name,
+          amount: U.round2(item.amount),
+          count: item.count,
+          pct: expenseTotal > 0 ? (item.amount / expenseTotal) * 100 : 0
+        };
+      }).sort((a, b) => b.amount - a.amount);
+
+      return {
+        incomeTotal,
+        expenseTotal,
+        incomeCount: incomes.length,
+        expenseCount: expenses.length,
+        byChannel,
+        byCategory
+      };
+    }
+
+    const current = collect(start, end);
+    const prev = collect(prevStart, prevEnd);
+
+    const days = [];
+    for (let i = 0; i < 7; i += 1) {
+      const date = U.addDays(start, i);
+      const income = U.round2(U.sum((data.incomes || []).filter((r) => r.date === date), (r) => r.amount));
+      const expense = U.round2(U.sum((data.expenses || []).filter((r) => r.date === date), (r) => r.amount));
+      days.push({
+        date,
+        weekday: U.weekdayCN(date),
+        income,
+        expense,
+        net: U.round2(income - expense)
+      });
+    }
+
+    const incomeDelta = prev.incomeTotal > 0
+      ? ((current.incomeTotal - prev.incomeTotal) / prev.incomeTotal) * 100
+      : null;
+    const expenseDelta = prev.expenseTotal > 0
+      ? ((current.expenseTotal - prev.expenseTotal) / prev.expenseTotal) * 100
+      : null;
+    const info = U.isoWeek(start);
+
+    return {
+      start,
+      end,
+      prevStart,
+      prevEnd,
+      weekNumber: info.week,
+      year: info.year,
+      label: `${info.year}年第${info.week}周`,
+      income: {
+        total: current.incomeTotal,
+        count: current.incomeCount,
+        byChannel: current.byChannel,
+        days
+      },
+      expense: {
+        total: current.expenseTotal,
+        count: current.expenseCount,
+        byCategory: current.byCategory
+      },
+      net: U.round2(current.incomeTotal - current.expenseTotal),
+      prev: {
+        start: prevStart,
+        end: prevEnd,
+        incomeTotal: prev.incomeTotal,
+        expenseTotal: prev.expenseTotal,
+        incomeDelta,
+        expenseDelta
+      },
+      days
+    };
+  };
+
   C.shares = function (data, distributable) {
     const investors = data.investors || [];
     const ratioSum = U.round2(U.sum(investors, (inv) => inv.ratio));

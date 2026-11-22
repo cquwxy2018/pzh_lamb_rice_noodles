@@ -674,6 +674,88 @@ button {
   align-items: start;
 }
 
+.grid-even {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+/* ---------- Weekly report ---------- */
+.week-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.week-nav {
+  display: flex;
+  gap: 6px;
+}
+
+.week-title {
+  flex: 1;
+  min-width: 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.week-title strong {
+  font-size: 15px;
+  letter-spacing: 0.3px;
+}
+
+.week-title span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.week-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.week-actions input[type="date"] {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fffdf9;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.kpi-foot .pos { color: var(--green); }
+.kpi-foot .neg { color: var(--red); }
+
+.table tr.is-today td {
+  background: #fdf4e8;
+}
+
+.share-cell {
+  min-width: 128px;
+}
+
+.share-bar {
+  display: block;
+  height: 5px;
+  margin-top: 5px;
+  border-radius: 3px;
+  background: #f0e7da;
+  overflow: hidden;
+}
+
+.share-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #d98b3a, #c2542e);
+}
+
 .stack {
   display: flex;
   flex-direction: column;

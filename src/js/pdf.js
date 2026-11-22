@@ -26,6 +26,54 @@
     return `<section class="section"><h2>${U.esc(title)}</h2>${inner}${note ? `<p class="note">${U.esc(note)}</p>` : ''}</section>`;
   }
 
+  const BASE_STYLE = `
+  @page { size: A4; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif;
+    color: #2b2620; font-size: 12px; line-height: 1.55;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .report-head { border-bottom: 2px solid #c2542e; padding-bottom: 8px; margin-bottom: 12px; }
+  .report-head .shop { font-size: 13px; color: #8a7f70; letter-spacing: .5px; }
+  .report-head h1 { font-size: 22px; margin: 3px 0 5px; color: #2b2620; }
+  .report-head .meta { font-size: 11px; color: #8a7f70; }
+  .report-head .meta span { margin-right: 16px; }
+  .section { margin-bottom: 14px; }
+  .section h2 {
+    font-size: 14px; margin: 0 0 6px; padding-left: 8px;
+    border-left: 4px solid #c2542e; color: #2b2620; break-after: avoid;
+  }
+  .overview { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .ov-item {
+    border: 1px solid #e7ddd0; border-radius: 6px; padding: 7px 9px; background: #faf6f0;
+    break-inside: avoid;
+  }
+  .ov-item span { display: block; font-size: 10.5px; color: #8a7f70; margin-bottom: 2px; }
+  .ov-item strong { font-size: 15px; font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  thead { display: table-header-group; }
+  th, td { border: 1px solid #e2d8ca; padding: 5px 8px; text-align: left; }
+  th { background: #f3ece2; font-weight: 600; color: #5c5346; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr { break-inside: avoid; }
+  tr.total td { background: #f8f3eb; font-weight: 700; border-top: 2px solid #d8cbb9; }
+  td.neg, strong.neg { color: #b23b2e; }
+  strong.pos { color: #2f7d4f; }
+  td.empty-cell { text-align: center; color: #a99f90; padding: 14px; }
+  .note { font-size: 10.5px; color: #8a7f70; margin: 6px 0 0; }
+  .rules { margin-top: 6px; padding: 10px 12px; background: #faf6f0; border: 1px solid #e7ddd0; border-radius: 6px; }
+  .rules li { font-size: 10.5px; color: #6b6254; margin: 2px 0; }
+  .report-foot { margin-top: 16px; padding-top: 8px; border-top: 1px solid #e2d8ca; font-size: 10px; color: #a99f90; }
+  `;
+
+  function deltaText(delta) {
+    if (delta === null) return '—';
+    const sign = delta > 0 ? '+' : '';
+    return `${sign}${U.num(delta).toFixed(1)}%`;
+  }
+
   function buildHTML(data, type, periodKey) {
     const isMonth = type === 'month';
     let start;
@@ -129,45 +177,7 @@
 <meta charset="UTF-8">
 <title>${U.esc(shopName)} - ${U.esc(title)}</title>
 <style>
-  @page { size: A4; margin: 16mm 14mm; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; }
-  body {
-    font-family: "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif;
-    color: #2b2620; font-size: 12px; line-height: 1.55;
-    -webkit-print-color-adjust: exact; print-color-adjust: exact;
-  }
-  .report-head { border-bottom: 2px solid #c2542e; padding-bottom: 10px; margin-bottom: 16px; }
-  .report-head .shop { font-size: 13px; color: #8a7f70; letter-spacing: .5px; }
-  .report-head h1 { font-size: 22px; margin: 4px 0 6px; color: #2b2620; }
-  .report-head .meta { font-size: 11px; color: #8a7f70; }
-  .report-head .meta span { margin-right: 16px; }
-  .section { margin-bottom: 18px; }
-  .section h2 {
-    font-size: 14px; margin: 0 0 8px; padding-left: 8px;
-    border-left: 4px solid #c2542e; color: #2b2620; break-after: avoid;
-  }
-  .overview { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-  .ov-item {
-    border: 1px solid #e7ddd0; border-radius: 6px; padding: 8px 10px; background: #faf6f0;
-    break-inside: avoid;
-  }
-  .ov-item span { display: block; font-size: 10.5px; color: #8a7f70; margin-bottom: 3px; }
-  .ov-item strong { font-size: 15px; font-weight: 700; }
-  table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
-  thead { display: table-header-group; }
-  th, td { border: 1px solid #e2d8ca; padding: 6px 8px; text-align: left; }
-  th { background: #f3ece2; font-weight: 600; color: #5c5346; }
-  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-  tr { break-inside: avoid; }
-  tr.total td { background: #f8f3eb; font-weight: 700; border-top: 2px solid #d8cbb9; }
-  td.neg, strong.neg { color: #b23b2e; }
-  strong.pos { color: #2f7d4f; }
-  td.empty-cell { text-align: center; color: #a99f90; padding: 14px; }
-  .note { font-size: 10.5px; color: #8a7f70; margin: 6px 0 0; }
-  .rules { margin-top: 6px; padding: 10px 12px; background: #faf6f0; border: 1px solid #e7ddd0; border-radius: 6px; }
-  .rules li { font-size: 10.5px; color: #6b6254; margin: 2px 0; }
-  .report-foot { margin-top: 16px; padding-top: 8px; border-top: 1px solid #e2d8ca; font-size: 10px; color: #a99f90; }
+${BASE_STYLE}
 </style>
 </head>
 <body>
@@ -200,5 +210,89 @@
 </html>`;
   }
 
-  window.PdfReport = { buildHTML };
+  function buildWeeklyHTML(data, weekStartIso) {
+    const stats = C.weekStats(data, weekStartIso);
+    const shopName = (data.settings && data.settings.shopName) || '羊肉米线记账';
+    const title = `${stats.label}收支周报`;
+    const generatedAt = new Date().toLocaleString('zh-CN', { hour12: false });
+    const avgDaily = stats.income.total / 7;
+
+    const overviewItems = [
+      ['营业收入', U.money(stats.income.total), ''],
+      ['现金支出', U.money(stats.expense.total), ''],
+      ['净流入', U.money(stats.net), stats.net >= 0 ? 'pos' : 'neg'],
+      ['日均营收', U.money(avgDaily), '']
+    ];
+    const overviewHTML = `<div class="overview">${overviewItems.map((item) => (
+      `<div class="ov-item"><span>${U.esc(item[0])}</span><strong class="${item[2]}">${U.esc(item[1])}</strong></div>`
+    )).join('')}</div>
+    <p class="note">较上周（${U.esc(stats.prev.start)} 至 ${U.esc(stats.prev.end)}）：收入 ${deltaText(stats.prev.incomeDelta)}，支出 ${deltaText(stats.prev.expenseDelta)}；上周收入 ${U.money(stats.prev.incomeTotal)}，支出 ${U.money(stats.prev.expenseTotal)}。</p>`;
+
+    const channelHTML = table(
+      ['收入渠道', '笔数', '金额', '占收入比'],
+      stats.income.byChannel.map((it) => [it.name, String(it.count), U.money(it.amount), pctOf(it.amount, stats.income.total)]),
+      ['合计', String(stats.income.count), U.money(stats.income.total), stats.income.total > 0 ? '100%' : '—'],
+      1
+    );
+
+    const categoryHTML = table(
+      ['支出分类', '笔数', '金额', '占支出比'],
+      stats.expense.byCategory.map((it) => [it.name, String(it.count), U.money(it.amount), pctOf(it.amount, stats.expense.total)]),
+      ['合计', String(stats.expense.count), U.money(stats.expense.total), stats.expense.total > 0 ? '100%' : '—'],
+      1
+    );
+
+    const dailyHTML = table(
+      ['日期', '星期', '收入', '支出', '净额'],
+      stats.days.map((day) => [U.fmtDateShort(day.date), day.weekday, U.money(day.income), U.money(day.expense), U.money(day.net)]),
+      ['合计', '', U.money(stats.income.total), U.money(stats.expense.total), U.money(stats.net)],
+      2
+    );
+
+    const rules = [
+      '本报告统计现金收支（营业收入与日常支出），不含折旧摊销与股东分红',
+      '收入、支出按记账日期归入所在自然周；周一至周日为一周',
+      '占比 = 该项目金额 ÷ 本周收入（或支出）合计',
+      '环比 =（本周 − 上周）÷ 上周；上周对应项为 0 时显示 —'
+    ];
+
+    return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>${U.esc(shopName)} - ${U.esc(title)}</title>
+<style>
+${BASE_STYLE}
+</style>
+</head>
+<body>
+  <div class="report-head">
+    <div class="shop">${U.esc(shopName)}</div>
+    <h1>${U.esc(title)}</h1>
+    <div class="meta">
+      <span>统计区间：${U.esc(stats.start)} 至 ${U.esc(stats.end)}</span>
+      <span>本周共 ${stats.income.count + stats.expense.count} 笔</span>
+      <span>收入 ${stats.income.count} 笔 · 支出 ${stats.expense.count} 笔</span>
+    </div>
+  </div>
+
+  ${section('一、本周概览', overviewHTML)}
+  ${section('二、收入构成', channelHTML)}
+  ${section('三、支出构成', categoryHTML)}
+  ${section('四、每日明细', dailyHTML, '仅列出周一至周日的日期；净额 = 当日收入 − 当日支出。')}
+
+  <section class="section">
+    <h2>口径说明</h2>
+    <ul class="rules">${rules.map((r) => `<li>${U.esc(r)}</li>`).join('')}</ul>
+  </section>
+
+  <div class="report-foot">
+    生成时间：${U.esc(generatedAt)} · 由「${U.esc(shopName)}」记账分红工具生成<br>
+    by @ 猴子_扛过吴彦祖 · 数据仅保存在本机
+  </div>
+</body>
+</html>`;
+  }
+
+  window.PdfReport = { buildHTML, buildWeeklyHTML };
 })();
